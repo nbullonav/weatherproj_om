@@ -7,41 +7,155 @@ import matplotlib.pyplot as plt
 # CONFIGURACIÓN DEL DASHBOARD
 # -----------------------------
 st.set_page_config(
-    page_title="Forecast de Estaciones",
+    page_title="Weather Forecast",
     layout="wide"
 )
 
-st.title("📈 Forecast de 3 Estaciones (Historic + SARIMAX + XGB + Hybrid)")
+st.title("📈 Forecast (Historic + SARIMAX + XGB + Hybrid)")
 
-tab1, tab2 = st.tabs(["📊 Forecast General", "🌊 Escenarios ENSO"])
 
-with tab1:    
-    st.header("📊 Forecast General")  
-    # -----------------------------
-    # CARGA DE DATOS
-    # -----------------------------
-    @st.cache_data
-    def load_station(station_id):
-        df = pd.read_csv(f"data/pred_{station_id}.csv")
-        df["time"] = pd.to_datetime(df["time"])
-        return df
+# ---------------------------------------------------
+# FUNCIONES
+# ---------------------------------------------------
 
-    stations = {
-        "Estación 84501": "84501",
-        "Estación 84401": "84401",
-        "Estación 84370": "84370"
+@st.cache_data
+def load_station():
+    df = pd.read_csv("data/pred_north.csv")
+    df["time"] = pd.to_datetime(df["time"])
+    return df
+
+@st.cache_data
+def load_test_metrics():
+    df = pd.read_csv("data/testsets_north.csv")
+    df["time"] = pd.to_datetime(df["time"])
+    df.set_index("time", inplace=True)
+    return df
+
+@st.cache_data
+def load_enso_scenarios():
+
+    scenario_files = {
+        "neutral": "data/pred_north_neutral.csv",
+        "nino_moderado": "data/pred_north_nino_moderado.csv",
+        "nino_fuerte": "data/pred_north_nino_fuerte.csv",
+        "nino_fuerte2": "data/pred_north_nino_fuerte_2.csv",
+        "nino_fuerte3": "data/pred_north_nino_fuerte_3.csv",
+        "nina_moderada": "data/pred_north_nina_moderada.csv"
     }
+    scenario_dfs = {}
 
-    # -----------------------------
+    for scen, path in scenario_files.items():
+
+        if os.path.exists(path):
+
+            df_s = pd.read_csv(path)
+            df_s["time"] = pd.to_datetime(df_s["time"])
+
+            scenario_dfs[scen] = df_s
+
+    return scenario_dfs
+
+def nse(y_true, y_pred):
+
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    denominator = np.sum((y_true - np.mean(y_true)) ** 2)
+
+    if denominator == 0:
+        return np.nan
+
+    return 1 - (
+        np.sum((y_true - y_pred) ** 2)
+        / denominator
+    )
+
+
+def kge(y_true, y_pred):
+
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    std_true = np.std(y_true)
+    mean_true = np.mean(y_true)
+
+    if std_true == 0 or mean_true == 0:
+        return np.nan
+
+    r = np.corrcoef(y_true, y_pred)[0, 1]
+    alpha = np.std(y_pred) / std_true
+    beta = np.mean(y_pred) / mean_true
+
+    return 1 - np.sqrt(
+        (r - 1) ** 2 +
+        (alpha - 1) ** 2 +
+        (beta - 1) ** 2
+    )
+
+
+def compute_metrics_test(df):
+
+    metrics = {}
+
+    for model in ["sarimax", "xgb", "hybrid"]:
+
+        y_true = df["real"]
+        y_pred = df[model]
+
+        rmse = np.sqrt(np.mean((y_true - y_pred) ** 2))
+        mae = np.mean(np.abs(y_true - y_pred))
+
+        metrics[model] = {
+            "rmse": rmse,
+            "mae": mae,
+            "nse": nse(y_true, y_pred),
+            "kge": kge(y_true, y_pred)
+        }
+
+    return metrics
+
+# ---------------------------------------------------
+# CARGA PRINCIPAL
+# ---------------------------------------------------
+
+df = load_station()
+
+required_cols = [
+    "time",
+    "historic",
+    "sarimax",
+    "xgb",
+    "hybrid"
+]
+missing_cols = [c for c in required_cols if c not in df.columns]
+
+if missing_cols:
+    st.error(f"Faltan columnas en pred_north.csv: {missing_cols}")
+    st.stop()
+
+# ---------------------------------------------------
+# TABS
+# ---------------------------------------------------
+
+tab1, tab2 = st.tabs(
+    ["📊 Forecast General", "🌊 Escenarios ENSO"]
+)
+
+# ===================================================
+# TAB 1
+# ===================================================
+
+with tab1:
+
+    st.header("📊 Forecast General")
+
+    # ---------------------------------------------------
     # SIDEBAR
-    # -----------------------------
-    st.sidebar.header("Opciones (sólo tab#1 Forecast General)")
+    # ---------------------------------------------------
 
-    station_name = st.sidebar.selectbox("Selecciona estación", list(stations.keys()))
-
-    station_id = stations[station_name]
-
-    df = load_station(station_id)
+    st.sidebar.header(
+        "Opciones (sólo tab #1 Forecast General)"
+    )
 
     models = st.sidebar.multiselect(
         "Modelos a mostrar",
@@ -49,194 +163,233 @@ with tab1:
         default=["historic", "sarimax", "xgb", "hybrid"]
     )
 
-    df["time"] = pd.to_datetime(df["time"])
-
-    # Fechas mínimas y máximas como datetime puro
-    min_date = pd.to_datetime(df["time"].min()).to_pydatetime()
-    max_date = pd.to_datetime(df["time"].max()).to_pydatetime()
+    min_date = df["time"].min().to_pydatetime()
+    max_date = df["time"].max().to_pydatetime()
 
     date_range = st.sidebar.slider(
         "Rango de fechas",
         min_value=min_date,
         max_value=max_date,
         value=(min_date, max_date),
-        key='slider_tab1'
+        key="slider_tab1"
     )
 
     start, end = date_range
-    start = pd.to_datetime(start).tz_localize(None)
-    end = pd.to_datetime(end).tz_localize(None)
 
-    # Filtrar
-    df_filtered = df[(df["time"] >= start) & (df["time"] <= end)]
+    start = pd.to_datetime(start)
+    end = pd.to_datetime(end)
 
+    df_filtered = df[
+        (df["time"] >= start)
+        & (df["time"] <= end)
+    ]
 
-    test_metrics = pd.read_csv(f"data/testsets_{station_id}.csv")
-    test_metrics["time"] = pd.to_datetime(test_metrics["time"])
-    test_metrics.set_index("time", inplace=True)
+    # ---------------------------------------------------
+    # GRÁFICO PRINCIPAL
+    # ---------------------------------------------------
 
-    # metricas streamlit
-
-    def compute_metrics_test(df):
-        metrics = {}
-        for model in ["sarimax", "xgb", "hybrid"]:
-            y_true = df["real"]
-            y_pred = df[model]
-
-            rmse = np.sqrt(np.mean((y_true - y_pred) ** 2))
-            mae = np.mean(np.abs(y_true - y_pred))
-            nse_val = nse(y_true, y_pred)
-            kge_val = kge(y_true, y_pred)
-
-            metrics[model] = {
-                "rmse": rmse,
-                "mae": mae,
-                "nse": nse_val,
-                "kge": kge_val
-            }
-        return metrics
-
-    def nse(y_true, y_pred):
-        return 1 - np.sum((y_true - y_pred)**2) / np.sum((y_true - np.mean(y_true))**2)
-
-    def kge(y_true, y_pred):
-        r = np.corrcoef(y_true, y_pred)[0, 1]
-        alpha = np.std(y_pred) / np.std(y_true)
-        beta = np.mean(y_pred) / np.mean(y_true)
-        return 1 - np.sqrt((r - 1)**2 + (alpha - 1)**2 + (beta - 1)**2)
-
-
-
-    # -----------------------------
-    # GRÁFICO
-    # -----------------------------
     fig, ax = plt.subplots(figsize=(12, 5))
 
     if "historic" in models:
-        ax.plot(df_filtered["time"], df_filtered["historic"], label="Historic", color="black")
+        ax.plot(
+            df_filtered["time"],
+            df_filtered["historic"],
+            label="Historic",
+            color="black"
+        )
 
     if "sarimax" in models:
-        ax.plot(df_filtered["time"], df_filtered["sarimax"], label="SARIMAX", linestyle="--", color="blue")
+        ax.plot(
+            df_filtered["time"],
+            df_filtered["sarimax"],
+            label="SARIMAX",
+            linestyle="--",
+            color="blue"
+        )
 
     if "xgb" in models:
-        ax.plot(df_filtered["time"], df_filtered["xgb"], label="XGB", linestyle=":", color="orange")
+        ax.plot(
+            df_filtered["time"],
+            df_filtered["xgb"],
+            label="XGB",
+            linestyle=":",
+            color="orange"
+        )
 
     if "hybrid" in models:
-        ax.plot(df_filtered["time"], df_filtered["hybrid"], label="Hybrid", color="red")
+        ax.plot(
+            df_filtered["time"],
+            df_filtered["hybrid"],
+            label="Hybrid",
+            color="red"
+        )
 
-    ax.set_title(f"Forecast - Estación {station_id}")
+    ax.set_title("Forecast - Estación Norte")
     ax.set_xlabel("Fecha")
-    ax.set_ylabel("Valor (log o real)")
+    ax.set_ylabel("Valor")
     ax.legend()
     ax.grid(True)
 
     st.pyplot(fig)
+    plt.close(fig)
 
-    # -----------------------------
-    # TABLA DE DATOS
-    # -----------------------------
+    # ---------------------------------------------------
+    # TABLA
+    # ---------------------------------------------------
+
     st.subheader("Datos filtrados")
     st.dataframe(df_filtered)
 
+    # ---------------------------------------------------
+    # TEST SET
+    # ---------------------------------------------------
 
+    test_metrics = load_test_metrics()
 
-
-    # -----------------------------
-    # GRÁFICO DEL TEST SET
-    # -----------------------------
-    st.subheader("📉 Comparación en el Test Set (2016–2026)")
+    st.subheader(
+        "📉 Comparación en el Test Set (2016-2026)"
+    )
 
     fig2, ax2 = plt.subplots(figsize=(12, 5))
 
-    ax2.plot(test_metrics.index, test_metrics["real"], label="Real", color="black")
-    ax2.plot(test_metrics.index, test_metrics["sarimax"], label="SARIMAX", linestyle="--", color="blue")
-    ax2.plot(test_metrics.index, test_metrics["xgb"], label="XGB", linestyle=":", color="orange")
-    ax2.plot(test_metrics.index, test_metrics["hybrid"], label="Hybrid", color="red")
+    ax2.plot(
+        test_metrics.index,
+        test_metrics["real"],
+        label="Real",
+        color="black"
+    )
 
-    ax2.set_title(f"Comparación de Modelos - Test Set {station_id}")
+    ax2.plot(
+        test_metrics.index,
+        test_metrics["sarimax"],
+        label="SARIMAX",
+        linestyle="--",
+        color="blue"
+    )
+
+    ax2.plot(
+        test_metrics.index,
+        test_metrics["xgb"],
+        label="XGB",
+        linestyle=":",
+        color="orange"
+    )
+
+    ax2.plot(
+        test_metrics.index,
+        test_metrics["hybrid"],
+        label="Hybrid",
+        color="red"
+    )
+
+    ax2.set_title("Comparación de Modelos - Test Set")
     ax2.set_xlabel("Fecha")
     ax2.set_ylabel("Valor real")
     ax2.legend()
     ax2.grid(True)
 
     st.pyplot(fig2)
+    plt.close(fig2)
 
-
-    st.subheader("📊 Métricas del Test Set (2016–2026)")
+    # ---------------------------------------------------
+    # MÉTRICAS
+    # ---------------------------------------------------
 
     metrics = compute_metrics_test(test_metrics)
-    col1, col2, col3 = st.columns(3)
-    for model, col in zip(["sarimax", "xgb", "hybrid"], [col1, col2, col3]):
-        m = metrics[model]
-        col.metric(f"{model.upper()} RMSE", f"{m['rmse']:.4f}")
-        col.metric(f"{model.upper()} MAE", f"{m['mae']:.4f}")
 
-    st.subheader("📈 Métricas Hidrológicas (NSE / KGE)")
-    col1, col2, col3 = st.columns(3)
-    for model, col in zip(["sarimax", "xgb", "hybrid"], [col1, col2, col3]):
-        m = metrics[model]
-        col.metric(f"{model.upper()} NSE", f"{m['nse']:.4f}")
-        col.metric(f"{model.upper()} KGE", f"{m['kge']:.4f}")
+    st.subheader("📊 Métricas del Test Set")
 
+    col1, col2, col3 = st.columns(3)
+
+    for model, col in zip(
+        ["sarimax", "xgb", "hybrid"],
+        [col1, col2, col3]
+    ):
+
+        m = metrics[model]
+
+        col.metric(
+            f"{model.upper()} RMSE",
+            f"{m['rmse']:.4f}"
+        )
+
+        col.metric(
+            f"{model.upper()} MAE",
+            f"{m['mae']:.4f}"
+        )
+
+    st.subheader("📈 Métricas Hidrológicas")
+
+    col1, col2, col3 = st.columns(3)
+
+    for model, col in zip(
+        ["sarimax", "xgb", "hybrid"],
+        [col1, col2, col3]
+    ):
+
+        m = metrics[model]
+
+        col.metric(
+            f"{model.upper()} NSE",
+            f"{m['nse']:.4f}"
+            if pd.notna(m["nse"])
+            else "N/A"
+        )
+
+        col.metric(
+            f"{model.upper()} KGE",
+            f"{m['kge']:.4f}"
+            if pd.notna(m["kge"])
+            else "N/A"
+        )
+
+# ===================================================
+# TAB 2
+# ===================================================
 
 with tab2:
+
     st.header("🌊 Escenarios ENSO (Hybrid)")
 
-    # -----------------------------
-    # Cargar escenarios ENSO
-    # -----------------------------
-    import os
+    scenario_dfs = load_enso_scenarios()
 
-    scenario_files = {
-        "neutral": f"data/pred_{station_id}_neutral.csv",
-        "nino_moderado": f"data/pred_{station_id}_nino_moderado.csv",
-        "nino_fuerte": f"data/pred_{station_id}_nino_fuerte.csv",
-        "nino_fuerte2": f"data/pred_{station_id}_nino_fuerte_2.csv",
-        "nino_fuerte3": f"data/pred_{station_id}_nino_fuerte_3.csv",
-        "nina_moderada": f"data/pred_{station_id}_nina_moderada.csv"
-    }
+    if len(scenario_dfs) == 0:
+        st.warning(
+            "No se encontraron archivos de escenarios ENSO."
+        )
+        st.stop()
 
-    scenario_dfs = {}
-
-    for scen, path in scenario_files.items():
-        if os.path.exists(path):
-            df_s = pd.read_csv(path)
-            df_s["time"] = pd.to_datetime(df_s["time"])
-            scenario_dfs[scen] = df_s
-
-    # -----------------------------
-    # Selector de escenarios
-    # -----------------------------
     scen_selected = st.multiselect(
-        "Selecciona escenarios ENSO a mostrar",
-        list(scenario_dfs.keys()),
+        "Selecciona escenarios ENSO",
+        options=list(scenario_dfs.keys()),
         default=list(scenario_dfs.keys())
     )
 
-    # -----------------------------
-    # Construir DataFrame combinado
-    # -----------------------------
     historic = df[["time", "historic"]].copy()
     historic.set_index("time", inplace=True)
 
     plot_df = historic.copy()
 
     for scen in scen_selected:
-        df_s = scenario_dfs[scen].copy()
-        df_s = df_s.set_index("time")
-        plot_df = plot_df.join(df_s["hybrid"].rename(scen), how="outer")
-        
 
-    # -----------------------------
-    # Selector de rango de años para ENSO
-    # -----------------------------
-    st.subheader("Filtrar rango de años para comparar escenarios")
+        df_s = scenario_dfs[scen].copy()
+
+        df_s = df_s.set_index("time")
+
+        plot_df = plot_df.join(
+            df_s["hybrid"].rename(scen),
+            how="outer"
+        )
+
+    st.subheader(
+        "Filtrar rango de años para comparar escenarios"
+    )
 
     min_enso_date = plot_df.index.min().to_pydatetime()
     max_enso_date = plot_df.index.max().to_pydatetime()
 
     enso_range = st.slider(
-        "Rango de fechas (solo afecta escenarios ENSO)",
+        "Rango de fechas",
         min_value=min_enso_date,
         max_value=max_enso_date,
         value=(min_enso_date, max_enso_date),
@@ -244,32 +397,21 @@ with tab2:
     )
 
     enso_start, enso_end = enso_range
-    enso_start = pd.to_datetime(enso_start).tz_localize(None)
-    enso_end = pd.to_datetime(enso_end).tz_localize(None)
 
-    plot_df_filtered = plot_df[(plot_df.index >= enso_start) & (plot_df.index <= enso_end)]
-
-
-    # -----------------------------
-    # Gráfico ENSO
-    # -----------------------------
-
-    # -----------------------------
-    # Convertir de log(prcp) a precipitación real
-    # -----------------------------
-    plot_df_filtered_real = plot_df_filtered.copy()
-
-    # Convertir histórico
-    #plot_df_filtered_real["historic"] = np.expm1(plot_df_filtered_real["historic"])
-    
-    # Convertir escenarios seleccionados
-    for scen in scen_selected:
-        plot_df_filtered_real[scen] = plot_df_filtered_real[scen]
-
+    plot_df_filtered = plot_df[
+        (plot_df.index >= pd.to_datetime(enso_start))
+        & (plot_df.index <= pd.to_datetime(enso_end))
+    ]
 
     fig3, ax3 = plt.subplots(figsize=(12, 5))
 
-    ax3.plot(plot_df_filtered_real.index, plot_df_filtered_real["historic"], label="Histórico", color="black", linewidth=2)
+    ax3.plot(
+        plot_df_filtered.index,
+        plot_df_filtered["historic"],
+        label="Histórico",
+        color="black",
+        linewidth=2
+    )
 
     colors_scen = {
         "neutral": "green",
@@ -281,25 +423,41 @@ with tab2:
     }
 
     for scen in scen_selected:
+
         ax3.plot(
-            plot_df_filtered_real.index,
-            plot_df_filtered_real[scen],
+            plot_df_filtered.index,
+            plot_df_filtered[scen],
             label=scen.replace("_", " ").title(),
             linestyle="--",
-            color=colors_scen[scen]
+            color=colors_scen.get(scen, "gray")
         )
 
-    ax3.axvline(historic.index[-1], color="gray", linestyle="--", linewidth=1)
-    ax3.set_title(f"Escenarios ENSO - Estación {station_id}")
+    last_historic = historic.index.max()
+
+    if (
+        last_historic >= pd.to_datetime(enso_start)
+        and
+        last_historic <= pd.to_datetime(enso_end)
+    ):
+
+        ax3.axvline(
+            last_historic,
+            color="gray",
+            linestyle="--",
+            linewidth=1
+        )
+
+    ax3.set_title(
+        "Escenarios ENSO - Estación Norte"
+    )
+
     ax3.set_xlabel("Fecha")
-    ax3.set_ylabel("Precipitación (real)")
+    ax3.set_ylabel("Precipitación")
     ax3.legend()
     ax3.grid(True)
 
     st.pyplot(fig3)
+    plt.close(fig3)
 
-    # -----------------------------
-    # Tabla ENSO
-    # -----------------------------
     st.subheader("Datos de escenarios ENSO")
-    st.dataframe(plot_df.tail(24))
+    st.dataframe(plot_df_filtered.tail(24))
