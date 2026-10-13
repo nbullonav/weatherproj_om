@@ -21,14 +21,15 @@ import statsmodels.api as sm
 import os
 
 # ================== 1. cargar datos ==================
-station_id = os.environ["STATION_ID"]
-csv_path = f"data/station{station_id}.csv"
+#station_id = os.environ["STATION_ID"]
+#csv_path = f"data/station{station_id}.csv"
+csv_path = "data/coordsdata.csv"
 
-df = pd.read_csv(csv_path, parse_dates=["time"])
-df = df.set_index("time").sort_index()
+df = pd.read_csv(csv_path, parse_dates=["monthyear"])
+df = df.set_index("monthyear").sort_index()
 
 df = df.drop(columns=["NINO12","NINO34"])
-df["log_prcp"] = np.log1p(df["prcp"])
+df["log_prcp"] = np.log1p(df["precipitation_sum"])
 
 # ================== 2. Lags (OK antes del split) ==================
 for k in [1,3,6,12]:
@@ -75,8 +76,7 @@ lag_features = (
 
 rolling_features = [
     "prcp_roll3", "prcp_roll6", "prcp_roll12","prcp_std6", 
-    "enso34_roll3", #"enso34_roll6",
-    "ICEN_roll3"#,"ICEN_roll6"
+    "enso34_roll3", "ICEN_roll3"
 ]
 
 # month_features = [col for col in df.columns if col.startswith("month_")]
@@ -366,13 +366,13 @@ for scen_name, scen_values in scenarios.items():
     # Lags de precipitación
     # -------------------------
     for k in [1, 3, 6, 12]:
-        df_ext[f"prcp_lag{k}"] = df_ext["prcp"].shift(k)
+        df_ext[f"prcp_lag{k}"] = df_ext["precipitation_sum"].shift(k)
 
     # -------------------------
     # Rollings de precipitación
     # -------------------------
-    df_ext["prcp_roll3"] = df_ext["prcp"].rolling(3).mean()
-    df_ext["prcp_roll6"] = df_ext["prcp"].rolling(6).mean()
+    df_ext["prcp_roll3"] = df_ext["precipitation_sum"].rolling(3).mean()
+    df_ext["prcp_roll6"] = df_ext["precipitation_sum"].rolling(6).mean()
 
     # -------------------------
     # ENSO rezagos
@@ -428,10 +428,10 @@ for scen_name, scen_values in scenarios.items():
         "hybrid": hybrid_ext_scen
     })
 
-    scen_df.to_csv(f"data/pred_{station_id}_{scen_name}.csv", index=False)
+    scen_df.to_csv(f"data/pred_north_{scen_name}.csv", index=False)
 
 # para grafico streamlit
-dhistoric = y.to_frame("historic").reset_index().rename(columns={"index": "time"})
+dhistoric = y.to_frame("historic").reset_index().rename(columns={"monthyear": "time"})
 dsarimax = sarimax2_future_series.to_frame("sarimax").reset_index().rename(columns={"index": "time"})
 dxgb = xgb_future_series.to_frame("xgb").reset_index().rename(columns={"index": "time"})
 dhybrid = hybrid_ext_future.to_frame("hybrid").reset_index().rename(columns={"index": "time"})
@@ -444,7 +444,7 @@ df_final = (
     .sort_values("time")
 )
 
-csvfilefinal = "data/pred_" + station_id + ".csv"
+csvfilefinal = "data/pred_north.csv"
 df_final.to_csv(csvfilefinal, index=False)
 
 # test sets
@@ -458,5 +458,5 @@ test_df = pd.DataFrame({
 
 test_df.set_index("time", inplace=True)
 
-csvfiletest = "data/testsets_" + station_id + ".csv"
+csvfiletest = "data/testsets_north.csv"
 test_df.to_csv(csvfiletest)
