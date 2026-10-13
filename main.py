@@ -18,7 +18,8 @@ params = {
 	"start_date": "1980-01-01",
 	"end_date": "2026-10-08",
 	"daily": ["precipitation_sum", "rain_sum", "snowfall_sum", "temperature_2m_mean", "surface_pressure_mean"],
-	"timezone": "America/Chicago",
+	#"timezone": "America/Chicago",
+	"timezone": "GMT",
 }
 responses = openmeteo.weather_api(url, params = params)
 
