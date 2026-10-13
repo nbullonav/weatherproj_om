@@ -44,7 +44,7 @@ daily_data = {
 		end =  pd.to_datetime(daily.TimeEnd(), unit = "s", utc = True),
 		freq = pd.Timedelta(seconds = daily.Interval()),
 		inclusive = "left"
-	).tz_convert(response.Timezone().decode())
+	)
 }
 
 daily_data["precipitation_sum"] = daily_precipitation_sum
