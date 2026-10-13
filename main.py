@@ -15,7 +15,7 @@ url = "https://archive-api.open-meteo.com/v1/archive"
 params = {
 	"latitude": -5.0,
 	"longitude": -82.0,
-	"start_date": "1980-01-01",
+	"start_date": "1982-01-01",
 	"end_date": "2026-10-08",
 	"daily": ["precipitation_sum", "rain_sum", "snowfall_sum", "temperature_2m_mean", "surface_pressure_mean"],
 	#"timezone": "America/Chicago",
@@ -68,7 +68,7 @@ df_sst = pd.read_csv("https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices",
                      names=["YR", "MON", "NINO12","NINO12ANOM", "NINO3","NINO3ANOM", "NINO4","NINO4ANOM", "NINO34","NINO34ANOM"], header=0)
 df_sst_final = df_sst[['YR','MON','NINO12',"NINO12ANOM","NINO34","NINO34ANOM"]]
 df_sst_final['monthyear'] = df_sst_final['YR'].astype(str) + '-' + df_sst_final['MON'].astype(str)
-df_sst_final = df_sst_final[df_sst_final['monthyear']>= "1980-01-01"]
+df_sst_final = df_sst_final[df_sst_final['monthyear']>= "1982-01-01"]
 df_sst_final['monthyear'] = pd.to_datetime(df_sst_final['monthyear'], format='%Y-%m')
 df_sst_final.set_index('monthyear', inplace=True)
 df_sst_final.drop(columns=['YR','MON'], inplace=True)
@@ -76,7 +76,7 @@ df_sst_final.drop(columns=['YR','MON'], inplace=True)
 # 1.3 Captura de datos - ICEN
 df_icen = pd.read_csv("http://met.igp.gob.pe/datos/ICEN.txt", sep=r"\s+", skiprows=5 ,header=None,names=["YR","MON","ICEN"])
 df_icen['monthyear'] = df_icen['YR'].astype(str) + '-' + df_icen['MON'].astype(str)
-df_icen = df_icen[df_icen['monthyear']>= "1980-01-01"]
+df_icen = df_icen[df_icen['monthyear']>= "1982-01-01"]
 df_icen['monthyear'] = pd.to_datetime(df_icen['monthyear'], format='%Y-%m')
 df_icen.set_index('monthyear', inplace=True)
 df_icen.drop(columns=['YR','MON'], inplace=True)
