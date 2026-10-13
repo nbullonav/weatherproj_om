@@ -136,7 +136,7 @@ df_finalcleaned = pd.concat([
 ## salvar en .csv
 whichfields = ['precipitation_sum','temperature_2m_mean','surface_pressure_mean','lat','long','NINO12','NINO12ANOM','NINO34','NINO34ANOM','ICEN']
 # Define csv filename
-csvfile = 'coords-5-82.csv'
+csvfile = 'coordsdata.csv'
 
 df_finalcleaned.to_csv(csvfile)
 print(f"Guardado: {csvfile}")
