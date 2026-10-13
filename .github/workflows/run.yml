@@ -1,0 +1,46 @@
+name: Meteostat Runner
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    strategy:
+      max-parallel: 1
+      matrix:
+        station: ["84370","84401", "84501"]
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: pip install -r requirements_dataload.txt
+
+      - name: Run main.py for each station
+        env:
+          STATION_ID: ${{ matrix.station }}
+        run: python main.py
+        
+      - name: Upload CSV artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: station-${{ matrix.station }}
+          path: station${{ matrix.station }}.csv
+
+      - name: Move CSV to data folder
+        run: |
+          mkdir -p data
+          mv station${{ matrix.station }}.csv data/
+
+      - name: Commit CSV to repo
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add data/
+          git commit -m "Update CSV for station ${{ matrix.station }}" || true
+          git pull --rebase origin main
+          git push
