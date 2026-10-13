@@ -4,9 +4,10 @@ matplotlib==3.8.4
 seaborn
 missingno==0.5.2
 
-statsmodels==0.14.2
+statsforecast>=2.0.0
+statsmodels>=0.14.4
+scipy>=1.14
 xgboost==2.0.3
 scikit-learn==1.4.2
 utilsforecast==0.1.10
-statsforecast==1.7.5
 fpppy
