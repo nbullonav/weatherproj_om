@@ -63,7 +63,8 @@ monthly_dataframe['long'] = response.Longitude()
 daily_dataframe.set_index('monthyear', inplace=True)
 
 ## 1.2. Captura de datos - Dataset 2 (ONI data de NOAA.gov)
-df_sst = pd.read_csv("https://www.cpc.ncep.noaa.gov/data/indices/ersst5.nino.mth.91-20.ascii", sep='\s+',
+#df_sst = pd.read_csv("https://www.cpc.ncep.noaa.gov/data/indices/ersst5.nino.mth.91-20.ascii", sep='\s+',
+df_sst = pd.read_csv("https://www.cpc.ncep.noaa.gov/data/indices/sstoi.indices", sep='\s+',
                      names=["YR", "MON", "NINO12","NINO12ANOM", "NINO3","NINO3ANOM", "NINO4","NINO4ANOM", "NINO34","NINO34ANOM"], header=0)
 df_sst_final = df_sst[['YR','MON','NINO12',"NINO12ANOM","NINO34","NINO34ANOM"]]
 df_sst_final['monthyear'] = df_sst_final['YR'].astype(str) + '-' + df_sst_final['MON'].astype(str)
