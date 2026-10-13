@@ -365,14 +365,16 @@ for scen_name, scen_values in scenarios.items():
     # -------------------------
     # Lags de precipitación
     # -------------------------
+    df_ext["log_prcp"] = np.log1p(df_ext["precipitation_sum"])
+    
     for k in [1, 3, 6, 12]:
-        df_ext[f"prcp_lag{k}"] = df_ext["precipitation_sum"].shift(k)
+        df_ext[f"prcp_lag{k}"] = df_ext["log_prcp"].shift(k)
 
     # -------------------------
     # Rollings de precipitación
     # -------------------------
-    df_ext["prcp_roll3"] = df_ext["precipitation_sum"].rolling(3).mean()
-    df_ext["prcp_roll6"] = df_ext["precipitation_sum"].rolling(6).mean()
+    df_ext["prcp_roll3"] = df_ext["log_prcp"].rolling(3).mean()
+    df_ext["prcp_roll6"] = df_ext["log_prcp"].rolling(6).mean()
 
     # -------------------------
     # ENSO rezagos
